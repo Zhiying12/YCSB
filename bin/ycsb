@@ -110,6 +110,7 @@ DATABASES = {
     "replicant-java" : "site.ycsb.db.MultipaxosClient",
     "etcd"         : "site.ycsb.db.EtcdClient",
     "tikv"         : "site.ycsb.db.TikvClient",
+    "copilot"      : "site.ycsb.db.CopilotClient",
 }
 
 OPTIONS = {
