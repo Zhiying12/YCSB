@@ -14,6 +14,8 @@ public class Config {
   private int secondLeaderId;
   @JsonProperty("Address")
   private List<String> serverAddresses;
+  @JsonProperty("ClientID")
+  private int clientId;
 
   public int getLeaderId() {
     return leaderId;
@@ -21,6 +23,10 @@ public class Config {
 
   public int getSecondLeaderId() {
     return secondLeaderId;
+  }
+
+  public int getClientId() {
+    return clientId;
   }
 
   public String getServerAddress(int id) {

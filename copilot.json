@@ -5,5 +5,6 @@
     "0.0.0.0:12003"
   ],
   "LeaderID": 0,
-  "SecondLeaderID": 1
+  "SecondLeaderID": 1,
+  "ClientID": 0
 }

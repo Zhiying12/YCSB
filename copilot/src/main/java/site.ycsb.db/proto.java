@@ -80,3 +80,7 @@ class Reply {
   public ProposeReply proposeReply;
   public GetViewReply getViewReply;
 }
+
+class RegisterClientIdArgs {
+  public int clientId;
+}

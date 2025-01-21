@@ -3,8 +3,8 @@ package site.ycsb.db;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.time.Instant;
-import java.util.concurrent.BlockingDeque;
-import java.util.concurrent.LinkedBlockingDeque;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import org.codehaus.jackson.map.ObjectMapper;
 import site.ycsb.*;
@@ -34,8 +34,9 @@ public class CopilotClient extends DB {
   private int opId;
   private Command cmd;
   private Propose propose;
-  private BlockingDeque<Reply> replyQueue;
+  private BlockingQueue<Reply> replyQueue;
   private Thread[] threads;
+  private static int clientId = 0;
 
   @Override
   public void init() throws DBException {
@@ -48,12 +49,13 @@ public class CopilotClient extends DB {
       System.err.println("Couldn't load config.json");
       System.exit(1);
     }
-    id = UUID.randomUUID().hashCode() & 0xfffffff;
+//    id = UUID.randomUUID().hashCode() & 0xfffffff;
     leaderId = config.getLeaderId();
     secondLeaderId = config.getSecondLeaderId();
     sockets = new ArrayList<>();
     writers = new ArrayList<>();
     readers = new ArrayList<>();
+    CopilotClient.clientId = config.getClientId();
 
     keySize = 0;
     valueSize = 500;
@@ -73,12 +75,28 @@ public class CopilotClient extends DB {
     defaultValue = String.format("%-" + valueSize + "s", "a");
 
     cmd = new Command();
-    cmd.clientId = id;
+    cmd.clientId = CopilotClient.clientId;
+    CopilotClient.clientId++;
     propose = new Propose();
 
     connect();
 
-    replyQueue = new LinkedBlockingDeque<>();
+    // register client id
+    ByteBuffer buffer = ByteBuffer.allocate(4);
+    buffer.order(ByteOrder.LITTLE_ENDIAN);
+    buffer.putInt(0, cmd.clientId);
+    for (int i = 0; i < sockets.size(); i++) {
+      try {
+        DataOutputStream writer = writers.get(i);
+        writer.write(MessageType.REGISTER_CLIENT_ID.getValue());
+        writer.write(buffer.array());
+        writer.flush();
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
+    }
+
+    replyQueue = new LinkedBlockingQueue<>();
 
     threads = new Thread[sockets.size()];
     for (int i = 0; i < sockets.size(); i++) {
@@ -256,7 +274,7 @@ public class CopilotClient extends DB {
       }
 
       while (true) {
-        Reply reply = replyQueue.poll(2, TimeUnit.SECONDS);
+        Reply reply = replyQueue.poll(60, TimeUnit.SECONDS);
         if (reply != null) {
           byte msgType = reply.messageType.getValue();
           if (MessageType.values()[msgType] == MessageType.PROPOSE_REPLY) {
@@ -282,16 +300,36 @@ public class CopilotClient extends DB {
     DataOutputStream writer = writers.get(serverId);
     writer.writeByte(MessageType.PROPOSE.getValue());
     ByteBuffer buffer;
-    buffer = ByteBuffer.allocate(4);
-    buffer.order(ByteOrder.LITTLE_ENDIAN);
-    buffer.putInt(0, propose.commandId);
-    writer.write(buffer.array());
+//    buffer = ByteBuffer.allocate(4);
+//    buffer.order(ByteOrder.LITTLE_ENDIAN);
+//    buffer.putInt(0, propose.commandId);
+//    writer.write(buffer.array());
+    int cmdId = propose.commandId;
+    byte[] cmdByte = new byte[4];
+    cmdByte[0] = (byte) cmdId;
+    cmdByte[1] = (byte) (cmdId >> 8);
+    cmdByte[2] = (byte) (cmdId >> 16);
+    cmdByte[3] = (byte) (cmdId >> 24);
+    writer.write(cmdByte);
 
     // send command
-    buffer.putInt(0, cmd.clientId);
-    writer.write(buffer.array());
-    buffer.putInt(0, cmd.opId);
-    writer.write(buffer.array());
+//    buffer.putInt(0, cmd.clientId);
+//    writer.write(buffer.array());
+//    buffer.putInt(0, cmd.opId);
+//    writer.write(buffer.array());
+    int cId = cmd.clientId;
+    cmdByte[0] = (byte) cId;
+    cmdByte[1] = (byte) (cId >> 8);
+    cmdByte[2] = (byte) (cId >> 16);
+    cmdByte[3] = (byte) (cId >> 24);
+    writer.write(cmdByte);
+
+    int opId = cmd.opId;
+    cmdByte[0] = (byte) opId;
+    cmdByte[1] = (byte) (opId >> 8);
+    cmdByte[2] = (byte) (opId >> 16);
+    cmdByte[3] = (byte) (opId >> 24);
+    writer.write(cmdByte);
     writer.writeByte(cmd.op.getValue());
     writer.write(cmd.key.getBytes());
     writer.write(cmd.value.getBytes());
@@ -305,6 +343,7 @@ public class CopilotClient extends DB {
   }
 
   private void sendGetView(int serverId, int viewId) throws Exception {
+    System.out.println("sent getview");
     DataOutputStream writer = writers.get(serverId);
     writer.writeByte(MessageType.GET_VIEW.getValue());
     ByteBuffer buffer;
@@ -320,20 +359,25 @@ public class CopilotClient extends DB {
     ProposeReply proposeReply = new ProposeReply();
     proposeReply.OK = reader.readByte();
     byte[] buffer = new byte[4];
-    reader.read(buffer, 0, 4);
-    ByteBuffer byteBuffer = ByteBuffer.wrap(buffer);
-    byteBuffer.order(ByteOrder.LITTLE_ENDIAN);
-    proposeReply.commandId = byteBuffer.getInt();
+    int n = reader.read(buffer, 0, 4);
+    if (n != 4) {
+      System.out.printf("not correct number expect 4, but got %d\n", n);
+    }
+//    ByteBuffer byteBuffer = ByteBuffer.wrap(buffer);
+//    byteBuffer.order(ByteOrder.LITTLE_ENDIAN);
+//    proposeReply.commandId = byteBuffer.getInt();
+    proposeReply.commandId = (((buffer[3] & 0xff    ) << 24) |
+        ((buffer[2] & 0xff) << 16) |
+        ((buffer[1] & 0xff) <<  8) |
+        ((buffer[0] & 0xff)      ));
     buffer = new byte[valueSize];
     reader.readFully(buffer);
     proposeReply.value = new String(buffer);
     buffer = new byte[8];
-    reader.read(buffer, 0, 8);
-//    int value = 0;
-//    for (int i = 0; i < 4; i++) {
-//      value |= (buffer[i + 1] & 0xFF) << (8 * (3 - i));
-//    }
-//    proposeReply.commandId = value;
+    n = reader.read(buffer, 0, 8);
+    if (n != 8) {
+      System.out.printf("not correct number expect 8, but got %d\n", n);
+    }
     return proposeReply;
   }
 
@@ -356,7 +400,6 @@ public class CopilotClient extends DB {
         msgType = reader.readByte();
         if (MessageType.values()[msgType] == MessageType.PROPOSE_REPLY) {
           reply.proposeReply = recvProposeReply(serverId);
-//          System.out.printf("onreceive server id: %d, cmd id: %d\n", serverId, reply.proposeReply.commandId);
           reply.messageType = MessageType.PROPOSE_REPLY;
         } else {
           reply.getViewReply = recvGetViewReply(serverId);
