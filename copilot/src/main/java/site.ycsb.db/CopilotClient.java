@@ -36,7 +36,7 @@ public class CopilotClient extends DB {
   private Propose propose;
   private BlockingQueue<Reply> replyQueue;
   private Thread[] threads;
-  private static int clientId = 0;
+  private static int clientId = -1;
 
   @Override
   public void init() throws DBException {
@@ -55,7 +55,9 @@ public class CopilotClient extends DB {
     sockets = new ArrayList<>();
     writers = new ArrayList<>();
     readers = new ArrayList<>();
-    CopilotClient.clientId = config.getClientId();
+    if (CopilotClient.clientId == -1) {
+      CopilotClient.clientId = config.getClientId();
+    }
 
     keySize = 0;
     valueSize = 500;
@@ -72,7 +74,7 @@ public class CopilotClient extends DB {
     views[1].replicaId = secondLeaderId;
 
 
-    defaultValue = String.format("%-" + valueSize + "s", "a");
+    defaultValue = "a".repeat(500);
 
     cmd = new Command();
     cmd.clientId = CopilotClient.clientId;
@@ -145,11 +147,11 @@ public class CopilotClient extends DB {
     cmd.op = OperationType.GET;
     cmd.key = newKey;
     cmd.value = defaultValue;
+    opId++;
     cmd.opId = opId;
     propose.command = cmd;
     propose.commandId = opId;
     propose.timeStamp = Instant.now().getNano();;
-    opId++;
 
     try {
       String value = sendRequest();
@@ -190,11 +192,11 @@ public class CopilotClient extends DB {
     cmd.op = OperationType.PUT;
     cmd.key = newKey;
     cmd.value = value.toString();
+    opId++;
     cmd.opId = opId;
     propose.command = cmd;
     propose.commandId = opId;
     propose.timeStamp = Instant.now().getNano();
-    opId++;
 
     try {
       sendRequest();
