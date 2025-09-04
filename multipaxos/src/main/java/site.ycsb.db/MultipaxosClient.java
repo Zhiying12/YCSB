@@ -21,6 +21,15 @@ public class MultipaxosClient extends DB {
   private List<PrintWriter> writers;
   private List<BufferedReader> readers;
 
+  private String batchRequestSize;
+  private int payloadBatchSize;
+
+  private static final String BATCH_REQUEST_SIZE = "batchsize";
+  private static final String BATCH_REQUEST_SIZE_DEFAULT = "1";
+
+  private static final String ACUTAL_BATCH_SIZE = "actualsize";
+  private static final String ACTUAL_BATCH_SIZE_DEFAULT = "1";
+
   @Override
   public void init() throws DBException {
     ObjectMapper objectMapper = new ObjectMapper();
@@ -32,6 +41,8 @@ public class MultipaxosClient extends DB {
       System.err.println("Couldn't load config.json");
       System.exit(1);
     }
+    batchRequestSize = getProperties().getProperty(BATCH_REQUEST_SIZE, BATCH_REQUEST_SIZE_DEFAULT);
+    payloadBatchSize = Integer.parseInt(getProperties().getProperty(ACUTAL_BATCH_SIZE, ACTUAL_BATCH_SIZE_DEFAULT));
     leaderId = config.getLeaderId();
     sockets = new ArrayList<>();
     writers = new ArrayList<>();
@@ -71,9 +82,13 @@ public class MultipaxosClient extends DB {
   @Override
   public Status read(final String table, final String key, final Set<String> fields,
                      final Map<String, ByteIterator> result) {
-    String request = "get " + key + "\n";
+    StringBuilder request = new StringBuilder(batchRequestSize + " get");
+    for (int i = 0; i < payloadBatchSize; i++) {
+      request.append(" ").append(key);
+    }
+    request.append("\n");
     try {
-      String response = sendRequest(request);
+      String response = sendRequest(request.toString());
       result.put("field1", new StringByteIterator(response));
       return Status.OK;
     } catch (Exception e) {
@@ -101,9 +116,13 @@ public class MultipaxosClient extends DB {
     for (Map.Entry<String, ByteIterator> entry : values.entrySet()) {
       value.append(entry.getValue().toString());
     }
-    String request = "put " + key + " " + value + "\n";
+    StringBuilder request = new StringBuilder(batchRequestSize + " put");
+    for (int i = 0; i < payloadBatchSize; i++) {
+      request.append(" ").append(key).append(" ").append(value);
+    }
+    request.append("\n");
     try {
-      sendRequest(request);
+      sendRequest(request.toString());
       return Status.OK;
     } catch (Exception e) {
       return Status.ERROR;
