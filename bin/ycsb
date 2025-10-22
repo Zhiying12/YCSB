@@ -111,6 +111,7 @@ DATABASES = {
     "etcd"         : "site.ycsb.db.EtcdClient",
     "tikv"         : "site.ycsb.db.TikvClient",
     "copilot"      : "site.ycsb.db.CopilotClient",
+    "cassandra5"   : "site.ycsb.db.CassandraClient"
 }
 
 OPTIONS = {
