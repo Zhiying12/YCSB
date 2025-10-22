@@ -207,6 +207,7 @@ LICENSE file.
     <module>copilot</module>
     <module>etcd</module>
     <module>tikv</module>
+    <module>cassandra5</module>
   </modules>
 
   <build>
